@@ -4,9 +4,7 @@
 Introduction
 ------------
 
-This python module provides a wrapper around `treetaggerwrapper` which in turn is a Python based wrapper around the `TreeTagger` PoS-tagger.
-
-This might sound a bit strange in the first place, but actually, there is a simple reason for that approach: The `treetaggerwrapper` is designed as a non-concurrent wrapper. In various application this is a limitation you might not be willing to take. This module wraps a management class around the `treetaggerwrapper` which will enable concurent and even multithreaded execution.
+This python module provides a wrapper around treetagger. Currently this module makes use of module `treetaggerwrapper` but this depency will be changed in the future.
 
 Information about this module can be found here:
 

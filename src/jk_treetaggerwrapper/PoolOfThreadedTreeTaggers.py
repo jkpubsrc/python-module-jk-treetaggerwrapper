@@ -1,13 +1,13 @@
-#!/usr/bin/python3
 
 
 import time
 import threading
 import contextlib
-
-import jk_utils
+import re
 
 import treetaggerwrapper as ttpw
+
+from .ObservableEvent import ObservableEvent
 
 
 
@@ -15,6 +15,8 @@ import treetaggerwrapper as ttpw
 # This class wraps around tree taggers. It is best suitable for use in concurrent, multithreaded environments.
 #
 class PoolOfThreadedTreeTaggers(object):
+
+	_SPLIT_PATTERN = re.compile("^([^\t]+)\t([a-zA-Z0-9]+)\s+(.+)\s+([^\s]+)$")
 
 	class _LangSpecificCache(object):
 
@@ -38,7 +40,7 @@ class PoolOfThreadedTreeTaggers(object):
 	def __init__(self, treeTaggerInstallationPath:str):
 		self.__treeTaggerInstallationPath = treeTaggerInstallationPath
 		self.__unused = {}
-		self.__onTaggerCreated = jk_utils.ObservableEvent("onTaggerCreated")
+		self.__onTaggerCreated = ObservableEvent("onTaggerCreated")
 
 		self.__mainLock = threading.Lock()
 	#
@@ -113,6 +115,80 @@ class PoolOfThreadedTreeTaggers(object):
 
 		with self._useTagger(langID) as tagger:
 			return tagger.tag_text(text)
+	#
+
+	#
+	# Convenience method that grabs a free instance of a suitable <c>TreeTagger</c>, tags the data, returns the tree tagger instance used
+	# and then returns the tagging result to the caller.
+	#
+	# @param	bool bWithConfidence		A boolean value indicating wether to add the last confidence value or ignore it in the output
+	# @return	list						Returns a list of 3- respectively 4-tuples, where each tuple consists of these entries:
+	#										* str : The token tagged (= the input data)
+	#										* str : The type of that token
+	#										* str : The lemma as a string or <c>None</c> if tagging failed
+	#										* float : The confidence value
+	#
+	def tagText2(self, langID:str, text:str, bWithConfidence:bool = True, bWithNullsInsteadOfUnknown:bool = True) -> list:
+		assert isinstance(langID, str)
+		assert isinstance(text, str)
+
+		if bWithConfidence:
+			with self._useTagger(langID) as tagger:
+				ret = []
+				for item in tagger.tag_text(text):
+					result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN.match(item)
+					if result is None:
+						ret.append((
+							None,
+							None,
+							None,
+							None,
+						))
+					else:
+						g3 = result.group(3)
+						if bWithNullsInsteadOfUnknown:
+							ret.append((
+								result.group(1),
+								result.group(2),
+								None if g3 == "<unknown>" else g3,
+								float(result.group(4)),
+							))
+						else:
+							ret.append((
+								result.group(1),
+								result.group(2),
+								g3,
+								float(result.group(4)),
+							))
+				return ret
+
+		else:
+			with self._useTagger(langID) as tagger:
+				ret = []
+				for item in tagger.tag_text(text):
+					result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN.match(item)
+					if result is None:
+						ret.append((
+							None,
+							None,
+							None,
+							None,
+						))
+					else:
+						g3 = result.group(3)
+						if bWithNullsInsteadOfUnknown:
+							ret.append((
+								result.group(1),
+								result.group(2),
+								None if g3 == "<unknown>" else g3,
+							))
+						else:
+							ret.append((
+								result.group(1),
+								result.group(2),
+								g3,
+							))
+				return ret
 	#
 
 	#
