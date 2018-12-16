@@ -17,7 +17,7 @@ from .ReplaceException import ReplaceException
 #
 class PoolOfThreadedTreeTaggers(object):
 
-	_SPLIT_PATTERN = re.compile("^([^\t]+)\t(.+)\s+(.+)\s+([^\s]+)$")
+	_SPLIT_PATTERN_1 = re.compile("^(.+)\s+(.+)\s+([^\s]+)$")
 	_SPLIT_PATTERN_2 = re.compile("^<([^\s]+)\s+text=\"(.+)\"\s*/>$")
 
 	class _LangSpecificCache(object):
@@ -43,6 +43,7 @@ class PoolOfThreadedTreeTaggers(object):
 		self.__treeTaggerInstallationPath = treeTaggerInstallationPath
 		self.__unused = {}
 		self.__onTaggerCreated = ObservableEvent("onTaggerCreated")
+		self.__onParsingError = ObservableEvent("onParsingError")
 
 		self.__mainLock = threading.Lock()
 	#
@@ -52,7 +53,21 @@ class PoolOfThreadedTreeTaggers(object):
 	################################################################
 
 	#
+	# This property returns an event object. Whenever a parsing error occured, an event is fired.
+	#
+	# The arguments passed on to the event handler are the following:
+	# * str langID : The ID of the language the tagger has been created for.
+	#
+	@property
+	def onParsingError(self):
+		return self.__onParsingError
+	#
+
+	#
 	# This property returns an event object. Whenever a new TreeTagger process is created, this event is fired.
+	#
+	# The arguments passed on to the event handler are the following:
+	# * str langID : The ID of the language the tagger has been created for.
 	#
 	@property
 	def onTaggerCreated(self):
@@ -208,7 +223,7 @@ class PoolOfThreadedTreeTaggers(object):
 		assert isinstance(langID, str)
 		assert isinstance(text, str)
 
-		n = 100
+		n = 20
 		while True:
 			try:
 				n -= 1
@@ -219,102 +234,235 @@ class PoolOfThreadedTreeTaggers(object):
 				text = text.replace(ee.pattern, ee.replacement, 1)
 	#
 
-	def __tagText2(self, langID:str, text:str, bWithConfidence:bool = True, bWithNullsInsteadOfUnknown:bool = True) -> list:
-		if bWithConfidence:
-			with self._useTagger(langID) as tagger:
-				ret = []
-				for item in tagger.tag_text(text):
-					result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_2.match(item)
-					if result != None:
-						special = self.__parseSpecial(
-							text,
-							item,
-							result.group(1),
-							result.group(2),
-							bWithConfidence
-							)
-						if special[0] != None:
-							del ret[-1]
-							ret.append(special)
-						else:
-							ret.append(special)
-					else:
-						result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN.match(item)
-						if result != None:
-							g3 = result.group(3)
-							if bWithNullsInsteadOfUnknown:
-								ret.append((
-									result.group(1),
-									result.group(2),
-									None if g3 == "<unknown>" else g3,
-									float(result.group(4)),
-								))
-							else:
-								ret.append((
-									result.group(1),
-									result.group(2),
-									g3,
-									float(result.group(4)),
-								))
-						else:
-							print()
-							print(text)
-							print("No suitable pattern: " + item)
-							print()
-							ret.append((
-								None,
-								None,
-								None,
-								None,
-							))
-				return ret
+	def __parseTreeTaggerOutput2c(self, orgText:str, treeTaggerOutput:str):
+		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_2.match(treeTaggerOutput)
+		if result is None:
+			return None
 
+		gID = result.group(1)
+		gContent = result.group(2)
+
+		if gID == "repdns":
+			pos = gContent.rfind(".")
+			if pos > 0:
+				lastPartC = gContent[pos + 1]
+				if lastPartC.isupper():
+					raise ReplaceException(gContent, gContent[:pos + 1] + " " + gContent[pos:])
+				else:
+					return (
+						"§DNS§",
+						gContent,
+						1,
+					)
+		elif gID == "repemail":
+			return (
+				"§EMAIL§",
+				gContent,
+				1,
+			)
+		elif gID == "repurl":
+			return (
+				"§URL§",
+				gContent,
+				1,
+			)
 		else:
-			with self._useTagger(langID) as tagger:
-				ret = []
+			self.__onParsingError.fire(
+				orgText,
+				treeTaggerOutput,
+			)
+			return (
+				None,
+				None,
+				None,
+			)
+	#
+
+	def __parseTreeTaggerOutput2nc(self, orgText:str, treeTaggerOutput:str):
+		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_2.match(treeTaggerOutput)
+		if result is None:
+			return None
+
+		gID = result.group(1)
+		gContent = result.group(2)
+
+		if gID == "repdns":
+			pos = gContent.rfind(".")
+			if pos > 0:
+				lastPartC = gContent[pos + 1]
+				if lastPartC.isupper():
+					raise ReplaceException(gContent, gContent[:pos + 1] + " " + gContent[pos:])
+				else:
+					return (
+						"§DNS§",
+						gContent,
+					)
+		elif gID == "repemail":
+			return (
+				"§EMAIL§",
+				gContent,
+			)
+		elif gID == "repurl":
+			return (
+				"§URL§",
+				gContent,
+			)
+		else:
+			self.__onParsingError.fire(
+				orgText,
+				treeTaggerOutput,
+			)
+			return (
+				None,
+				None,
+			)
+	#
+
+	#
+	# Parse tree tagger output.
+	#
+	# @param		str treeTaggerOutput			Output of tree tagger, f.e.:
+	#												* "CC and 0.999989"
+	#												* "NP <unknown> 0.983141"
+	#												* "VVZ hold 1.000000"
+	#
+	def __parseTreeTaggerOutput1c(self, token:str, treeTaggerOutput:str, bWithNullsInsteadOfUnknown:bool):
+		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_1.match(treeTaggerOutput)
+		if result is None:
+			return None
+
+		gTag = result.group(1)
+		gLemma = result.group(2)
+		gConfidence = float(result.group(3))
+
+		if (token == "€") and (gTag == "NN"):
+			# HACK: return correct tag
+			return (
+				"$",
+				"€",
+				gConfidence
+			)
+
+		if bWithNullsInsteadOfUnknown:
+			return (
+				gTag,
+				None if gLemma == "<unknown>" else gLemma,
+				gConfidence
+			)
+		else:
+			return (
+				gTag,
+				gLemma,
+				gConfidence
+			)
+	#
+
+	def __parseTreeTaggerOutput1nc(self, token:str, treeTaggerOutput:str, bWithNullsInsteadOfUnknown:bool):
+		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_1.match(treeTaggerOutput)
+		if result is None:
+			return None
+
+		gTag = result.group(1)
+		gLemma = result.group(2)
+
+		if (token == "€") and (gTag == "NN"):
+			# HACK: return correct tag
+			return (
+				"$",
+				"€",
+			)
+
+		if bWithNullsInsteadOfUnknown:
+			return (
+				gTag,
+				None if gLemma == "<unknown>" else gLemma,
+			)
+		else:
+			return (
+				gTag,
+				gLemma,
+			)
+	#
+
+	def __tagText2(self, langID:str, text:str, bWithConfidence:bool = True, bWithNullsInsteadOfUnknown:bool = True) -> list:
+		ret = []
+		with self._useTagger(langID) as tagger:
+
+			if bWithConfidence:
 				for item in tagger.tag_text(text):
-					result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_2.match(item)
-					if result != None:
-						special = self.__parseSpecial(
-							text,
-							item,
-							result.group(1),
-							result.group(2),
-							bWithConfidence
-							)
-						if special[0] != None:
+					parts = item.split("\t")
+
+					if len(parts) == 1:
+						retTriple = self.__parseTreeTaggerOutput2c(text, parts[0])
+						if retTriple:
 							del ret[-1]
-							ret.append(special)
+							ret.append((retTriple[1], retTriple[0], retTriple[1], retTriple[2]))
 						else:
-							ret.append(special)
+							self.__onParsingError.fire(
+								text,
+								parts[0],
+							)
+							return (
+								None,
+								None,
+								None,
+							)
 					else:
-						result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN.match(item)
-						if result != None:
-							g3 = result.group(3)
-							if bWithNullsInsteadOfUnknown:
-								ret.append((
-									result.group(1),
-									result.group(2),
-									None if g3 == "<unknown>" else g3,
-								))
+						itemRet = [ parts[0] ]
+						for i in range(1, len(parts)):
+							retTriple = self.__parseTreeTaggerOutput1c(parts[0], parts[i], bWithNullsInsteadOfUnknown)
+							if retTriple:
+								itemRet.extend(retTriple)
 							else:
-								ret.append((
-									result.group(1),
-									result.group(2),
-									g3,
-								))
+								self.__onParsingError.fire(
+									text,
+									parts[i],
+								)
+								return (
+									None,
+									None,
+									None,
+								)
+
+						ret.append(itemRet)
+
+			else:
+				for item in tagger.tag_text(text):
+					parts = item.split("\t")
+
+					if len(parts) == 1:
+						retTriple = self.__parseTreeTaggerOutput2nc(text, parts[0])
+						if retTriple:
+							del ret[-1]
+							ret.append((retTriple[1], retTriple[0], retTriple[1], retTriple[2]))
 						else:
-							print()
-							print(text)
-							print("No suitable pattern: " + item)
-							print()
-							ret.append((
+							self.__onParsingError.fire(
+								text,
+								parts[0],
+							)
+							return (
 								None,
 								None,
-								None,
-								None,
-							))
-				return ret
+							)
+					else:
+						itemRet = [ parts[0] ]
+						for i in range(1, len(parts)):
+							retTriple = self.__parseTreeTaggerOutput1nc(parts[0], parts[i], bWithNullsInsteadOfUnknown)
+							if retTriple:
+								itemRet.extend(retTriple)
+							else:
+								self.__onParsingError.fire(
+									text,
+									parts[i],
+								)
+								return (
+									None,
+									None,
+								)
+
+						ret.append(itemRet)
+
+		return ret
 	#
 
 	#

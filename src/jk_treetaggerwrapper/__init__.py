@@ -1,5 +1,5 @@
 
 
-from .PoolOfThreadedTreeTaggers import PoolOfThreadedTreeTaggers
+from .PoolOfThreadedTreeTaggers2 import PoolOfThreadedTreeTaggers
 
 
