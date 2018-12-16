@@ -434,7 +434,7 @@ class PoolOfThreadedTreeTaggers(object):
 						retTriple = self.__parseTreeTaggerOutput2nc(text, parts[0])
 						if retTriple:
 							del ret[-1]
-							ret.append((retTriple[1], retTriple[0], retTriple[1], retTriple[2]))
+							ret.append((retTriple[1], retTriple[0], retTriple[1]))
 						else:
 							self.__onParsingError.fire(
 								text,
