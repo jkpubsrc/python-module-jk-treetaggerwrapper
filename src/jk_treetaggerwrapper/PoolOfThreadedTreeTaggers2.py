@@ -140,7 +140,7 @@ class PoolOfThreadedTreeTaggers(object):
 			if pos > 0:
 				lastPartC = gContent[pos + 1]
 				if lastPartC.isupper():
-					raise ReplaceException(gContent, gContent[:pos + 1] + " " + gContent[pos:])
+					raise ReplaceException(gContent, gContent[:pos] + " " + gContent[pos:])
 				else:
 					if bWithConfidence:
 						return (
