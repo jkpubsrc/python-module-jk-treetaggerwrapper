@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name = "jk_treetaggerwrapper",
-	version = "0.2018.12.19",
+	version = "0.2018.12.19.1",
 	description = "This python module provides a wrapper around treetagger.",
 	author = "Jürgen Knauth",
 	author_email = "pubsrc@binary-overflow.de",
