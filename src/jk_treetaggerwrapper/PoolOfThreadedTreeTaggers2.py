@@ -134,76 +134,6 @@ class PoolOfThreadedTreeTaggers(object):
 			return tagger.tag_text(text)
 	#
 
-	def __parseSpecial(self, text, item, gID, gContent, bWithConfidence):
-		if gID == "repdns":
-			pos = gContent.rfind(".")
-			if pos > 0:
-				lastPartC = gContent[pos + 1]
-				if lastPartC.isupper():
-					raise ReplaceException(gContent, gContent[:pos] + " " + gContent[pos:])
-				else:
-					if bWithConfidence:
-						return (
-							gContent,
-							"§DNS§",
-							gContent,
-							1,
-						)
-					else:
-						return (
-							gContent,
-							"§DNS§",
-							gContent,
-						)
-		elif gID == "repemail":
-			if bWithConfidence:
-				return (
-					gContent,
-					"§EMAIL§",
-					gContent,
-					1,
-				)
-			else:
-				return (
-					gContent,
-					"§EMAIL§",
-					gContent,
-				)
-		elif gID == "repurl":
-			if bWithConfidence:
-				return (
-					gContent,
-					"§URL§",
-					gContent,
-					1,
-				)
-			else:
-				return (
-					gContent,
-					"§URL§",
-					gContent,
-				)
-		else:
-			print()
-			print(text)
-			print("No suitable pattern: " + item)
-			print()
-			if bWithConfidence:
-				return (
-					None,
-					None,
-					None,
-					None,
-				)
-			else:
-				return (
-					None,
-					None,
-					None,
-				)
-
-	#
-
 	#
 	# Convenience method that grabs a free instance of a suitable <c>TreeTagger</c>, tags the data, returns the tree tagger instance used
 	# and then returns the tagging result to the caller.
@@ -223,18 +153,19 @@ class PoolOfThreadedTreeTaggers(object):
 		assert isinstance(langID, str)
 		assert isinstance(text, str)
 
-		n = 20
+		lastN = -1
 		while True:
 			try:
-				n -= 1
 				return self.__tagText2(langID, text, bWithConfidence, bWithNullsInsteadOfUnknown)
 			except ReplaceException as ee:
-				if n == 0:
+				if ee.nItemPos > lastN:
+					lastN = ee.nItemPos
+				else:
 					raise Exception("Endless loop! " + repr(text))
 				text = text.replace(ee.pattern, ee.replacement, 1)
 	#
 
-	def __parseTreeTaggerOutput2c(self, orgText:str, treeTaggerOutput:str):
+	def __parseTreeTaggerOutput2c(self, nItemPos:int, orgText:str, treeTaggerOutput:str):
 		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_2.match(treeTaggerOutput)
 		if result is None:
 			return None
@@ -247,7 +178,10 @@ class PoolOfThreadedTreeTaggers(object):
 			if pos > 0:
 				lastPartC = gContent[pos + 1]
 				if lastPartC.isupper():
-					raise ReplaceException(gContent, gContent[:pos + 1] + " " + gContent[pos:])
+					rep1 = gContent
+					rep2 = gContent[:pos + 1] + " " + gContent[pos + 1:]
+					print("Replacing " + repr(rep1) + " with " + repr(rep2) + " at pos " + str(nItemPos))
+					raise ReplaceException(nItemPos, rep1, rep2)
 				else:
 					return (
 						"§DNS§",
@@ -278,7 +212,7 @@ class PoolOfThreadedTreeTaggers(object):
 			)
 	#
 
-	def __parseTreeTaggerOutput2nc(self, orgText:str, treeTaggerOutput:str):
+	def __parseTreeTaggerOutput2nc(self, nItemPos:int, orgText:str, treeTaggerOutput:str):
 		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_2.match(treeTaggerOutput)
 		if result is None:
 			return None
@@ -291,7 +225,10 @@ class PoolOfThreadedTreeTaggers(object):
 			if pos > 0:
 				lastPartC = gContent[pos + 1]
 				if lastPartC.isupper():
-					raise ReplaceException(gContent, gContent[:pos + 1] + " " + gContent[pos:])
+					rep1 = gContent
+					rep2 = gContent[:pos + 1] + " " + gContent[pos + 1:]
+					print("Replacing " + repr(rep1) + " with " + repr(rep2))
+					raise ReplaceException(nItemPos, rep1, rep2)
 				else:
 					return (
 						"§DNS§",
@@ -326,7 +263,7 @@ class PoolOfThreadedTreeTaggers(object):
 	#												* "NP <unknown> 0.983141"
 	#												* "VVZ hold 1.000000"
 	#
-	def __parseTreeTaggerOutput1c(self, token:str, treeTaggerOutput:str, bWithNullsInsteadOfUnknown:bool):
+	def __parseTreeTaggerOutput1c(self, nItemPos:int, token:str, treeTaggerOutput:str, bWithNullsInsteadOfUnknown:bool):
 		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_1.match(treeTaggerOutput)
 		if result is None:
 			return None
@@ -357,7 +294,7 @@ class PoolOfThreadedTreeTaggers(object):
 			)
 	#
 
-	def __parseTreeTaggerOutput1nc(self, token:str, treeTaggerOutput:str, bWithNullsInsteadOfUnknown:bool):
+	def __parseTreeTaggerOutput1nc(self, nItemPos:int, token:str, treeTaggerOutput:str, bWithNullsInsteadOfUnknown:bool):
 		result = PoolOfThreadedTreeTaggers._SPLIT_PATTERN_1.match(treeTaggerOutput)
 		if result is None:
 			return None
@@ -389,11 +326,11 @@ class PoolOfThreadedTreeTaggers(object):
 		with self._useTagger(langID) as tagger:
 
 			if bWithConfidence:
-				for item in tagger.tag_text(text):
+				for nItemPos, item in enumerate(tagger.tag_text(text)):
 					parts = item.split("\t")
 
 					if len(parts) == 1:
-						retTriple = self.__parseTreeTaggerOutput2c(text, parts[0])
+						retTriple = self.__parseTreeTaggerOutput2c(nItemPos, text, parts[0])
 						if retTriple:
 							del ret[-1]
 							ret.append((retTriple[1], retTriple[0], retTriple[1], retTriple[2]))
@@ -410,7 +347,7 @@ class PoolOfThreadedTreeTaggers(object):
 					else:
 						itemRet = [ parts[0] ]
 						for i in range(1, len(parts)):
-							retTriple = self.__parseTreeTaggerOutput1c(parts[0], parts[i], bWithNullsInsteadOfUnknown)
+							retTriple = self.__parseTreeTaggerOutput1c(nItemPos, parts[0], parts[i], bWithNullsInsteadOfUnknown)
 							if retTriple:
 								itemRet.extend(retTriple)
 							else:
@@ -427,11 +364,11 @@ class PoolOfThreadedTreeTaggers(object):
 						ret.append(itemRet)
 
 			else:
-				for item in tagger.tag_text(text):
+				for nItemPos, item in enumerate(tagger.tag_text(text)):
 					parts = item.split("\t")
 
 					if len(parts) == 1:
-						retTriple = self.__parseTreeTaggerOutput2nc(text, parts[0])
+						retTriple = self.__parseTreeTaggerOutput2nc(nItemPos, text, parts[0])
 						if retTriple:
 							del ret[-1]
 							ret.append((retTriple[1], retTriple[0], retTriple[1]))
@@ -447,7 +384,7 @@ class PoolOfThreadedTreeTaggers(object):
 					else:
 						itemRet = [ parts[0] ]
 						for i in range(1, len(parts)):
-							retTriple = self.__parseTreeTaggerOutput1nc(parts[0], parts[i], bWithNullsInsteadOfUnknown)
+							retTriple = self.__parseTreeTaggerOutput1nc(nItemPos, parts[0], parts[i], bWithNullsInsteadOfUnknown)
 							if retTriple:
 								itemRet.extend(retTriple)
 							else:
