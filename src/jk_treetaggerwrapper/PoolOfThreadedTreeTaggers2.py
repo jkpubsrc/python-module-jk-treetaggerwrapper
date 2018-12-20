@@ -154,7 +154,7 @@ class PoolOfThreadedTreeTaggers(object):
 		assert isinstance(text, str)
 
 		lastN = -1
-		bWithReplacementAlerts = True
+		bWithReplacementAlerts = False	# TODO: Seems to cause some troubles
 		while True:
 			try:
 				return self.__tagText2(langID, text, bWithConfidence, bWithNullsInsteadOfUnknown, bWithReplacementAlerts)
