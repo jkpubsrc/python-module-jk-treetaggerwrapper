@@ -7,13 +7,13 @@ def readme():
 
 
 setup(name = "jk_treetaggerwrapper",
-	version = "0.2018.12.19.2",
+	version = "0.2018.12.28",
 	description = "This python module provides a wrapper around treetagger.",
 	author = "Jürgen Knauth",
 	author_email = "pubsrc@binary-overflow.de",
 	license = "Apache 2.0",
 	url = "https://github.com/jkpubsrc/python-module-jk-treetaggerwrapper",
-	download_url = "https://github.com/jkpubsrc/python-module-jk-treetaggerwrapper/tarball/0.2018.12.19.2",
+	download_url = "https://github.com/jkpubsrc/python-module-jk-treetaggerwrapper/tarball/0.2018.12.28",
 	keywords = [
 		"treetagger",
 		"pos-tagging"
