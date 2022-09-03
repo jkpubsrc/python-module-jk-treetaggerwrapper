@@ -9,7 +9,7 @@ This python module provides a wrapper around treetagger. Currently this module m
 Information about this module can be found here:
 
 * [github.com](https://github.com/jkpubsrc/python-module-jk-treetaggerwrapper)
-* [pypi.python.org](https://pypi.python.org/pypi/jk_treetaggerwrapper)
+* [pypi.org](https://pypi.org/project/jk_treetaggerwrapper/)
 
 How to use this module
 ----------------------
